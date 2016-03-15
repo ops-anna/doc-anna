@@ -1,0 +1,250 @@
+sls文件详解：
+
+SLS文件
+简述
+
+SLS（代表SaLt State文件）是Salt State系统的核心。SLS描述了系统的目标状态，由格式简单的数据构成。这经常被称作配置管理
+
+top.sls
+
+top.sls 是配置管理的入口文件，一切都是从这里开始，在master 主机上，默认存放在/srv/salt/目录. 
+top.sls 默认从 base 标签开始解析执行,下一级是操作的目标，可以通过正则，grain模块,或分组名,来进行匹配,再下一级是要执行的state文件，不包换扩展名。
+
+创建 /srv/salt/top.sls
+
+通过正则进行匹配的示例，
+base:
+  '*':
+    - webserver
+通过分组名进行匹配的示例，必须要有 - match: nodegroup
+base:
+  group1:
+    - match: nodegroup    
+    - webserver
+通过grain模块匹配的示例，必须要有- match: grain
+base:
+  'os:Fedora':
+    - match: grain
+    - webserver
+准备好top.sls文件后，编写一个state文件
+
+/srv/salt/webserver.sls
+apache:                 # 标签定义
+  pkg:                  # state declaration
+    - installed         # function declaration
+第一行被称为（ID declaration） 标签定义，在这里被定义为安装包的名。注意：在不同发行版软件包命名不同,比如 fedora 中叫httpd的包 Debian/Ubuntu中叫apache2
+第二行被称为（state declaration）状态定义， 在这里定义使用（pkg state module）
+第三行被称为（function declaration）函数定义， 在这里定义使用（pkg state module）调用 installed 函数
+最后可以在终端中执行命令来查看结果：
+
+salt '*' state.highstate
+或附件 test=True参数 测试执行
+
+salt '*' state.highstate -v test=True 
+主控端对目标主机（targeted minions）发出指令运行state.highstatem模块，目标主机首先会对top.sls下载，解析，然后按照top.sls内匹配规则内的定义的模块将被下载,解析,执行，然后结果反馈给 master.
+
+SLS文件命名空间
+
+注意在以上的例子中,SLS文件 webserver.sls 被简称为webserver. SLS文件命名空间有如下几条基本的规则：
+
+SLS文件的扩展名 .sls 被省略。 (例如. webserver.sls 变成 webserver)
+子目录可以更好的组织,每个子目录都由一个点来表示.(例如 webserver/dev.sls 可以简称为 webserver.dev）
+如果子目录创建一个init.sls的文件，引用的时候仅指定该目录即可. (例如 webserver/init.sls 可以简称为 webserver）
+如果一个目录下同时存在webserver.sls 和 webserver/init.sls，那么 webserver/init.sls 将被忽略，SLS文件引用的webserver将只引用webserver.sls
+state多文件示例
+
+下面是一个state多文件示例，
+
+apache/init.sls
+apache/httpd.conf
+ssh/init.sls
+ssh/server.sls
+ssh/banner
+ssh/ssh_config
+ssh/sshd_config
+创建一个引用这些目录的 server.sls
+
+server:
+  - apache
+  - ssh
+state的层级关系
+
+include 示例：
+
+include 包含某个state文件
+/srv/salt/apache.sls
+
+apache:
+  pkg:
+    - installed
+  service:
+    - running 
+    - require:
+      - pkg: apache
+使用 include 可以包换有state文件而不必重新写
+
+/srv/salt/apache-custom.sls
+include: 
+  apache 
+extend 示例：
+
+extend 与include配合使用，作用是 修改，或扩展引用的state文件的某个字段
+/srv/salt/apache.sls
+
+apache:
+  pkg:
+    - installed
+  service:
+    - running 
+    - require:
+      - pkg: apache
+extend默认是替换引用文件的某个字段的属性，如例
+
+/srv/salt/apache-change.sls
+include: 
+  - apache 
+extend：
+  apache  
+    pkg:
+      - name: vim
+      - installed     
+当extend与watch，或require结合使用的时候，则是扩展某个字段的属性，如例：
+
+/srv/salt/apache-custom.sls
+include: 
+  - apache 
+extend：
+  apache  
+    service:
+      - watch:
+        - file: /etc/redis.conf      
+state的逻辑关系列表
+
+match: 配模某个模块，比如 match: grain match: nodegroup
+require： 依赖某个state，在运行此state前，先运行依赖的state，依赖可以有多个
+watch： 在某个state变化时运行此模块
+order： 优先级比require和watch低，有order指定的state比没有order指定的优先级高
+state的逻辑关系实例
+
+require：依赖某个state，在运行此state前，先运行依赖的state，依赖可以有多个
+httpd:                                  # maps to "name"
+  pkg:    
+    - installed  
+  file：                                # maps to State module filename
+    - managed:                          # maps to the managed function in the file State module
+    - name: /etc/httpd/conf/httpd.conf  # one of many options passed to the manage function
+    - source: salt://httpd/httpd.conf
+    - require:  
+      - pkg: httpd
+watch：在某个state变化时运行此模块，watch除具备require功能外，还增了关注状态的功能。
+redis:
+  pkg:
+    - latest
+  file.managed:
+    - source: salt://redis/redis.conf
+    - name: /etc/redis.conf
+    - require:
+      - pkg: redis
+  service.running:
+    - enable: True
+    - watch:
+      - file: /etc/redis.conf
+      - pkg: redis
+order：优先级比require和watch低，有order指定的state比没有order指定的优先级高
+vim:
+  pkg.installed:
+    - order: 1
+想让某个state最后一个运行，可以用last
+
+进阶主题：模板
+
+使用模板来精简SLS，使SLS可以使用python的 循环，分支，判断 等逻辑
+
+{% for item in ['tmp','test'] %}
+/opt/{{ item }}:
+  file.directory:
+    - user: root
+    - group: root
+    - mode: 755
+    - makedirs: True
+{% endfor %}
+```markdown
+httpd:
+  pkg.managed:
+{% if grains['os'] == 'Ubuntu' %}
+    - name: apache2
+{% elif grains['os'] == 'CentOS' %}
+    - name: httpd
+{% endif %}
+    - installed
+通过加载jinja模板引擎，可以模板配置文件按照预订条件来生成最终的配置文件
+
+/opt/test.conf
+
+{% if grains['os'] == 'Ubuntu' %}
+host: {{ grains['host'] }}
+{% elif grains['os'] == 'CentOS' %}
+host: {{ grains['fqdn'] }}
+{% endif %}
+```markdown
+/opt/test.conf:
+  file.managed:
+    - source: salt://test.conf
+    - user: root
+    - group: root
+    - mode: 644
+    - template: jinja
+---------------------------------------------------------------------------------------示例： apache.sls文件内容 ##/srv/salt/apahce.sls，以后没有用绝对路径意思就是在/srv/salt下
+
+apache:            ##state ID，全文件唯一,如果模块没跟-name默认用的ID作为-name
+ pkg:             ##模块
+   - installed    ##函数
+  #- name: apache ##函数参数，可以省略
+ service:         ##模块
+   - running      ##函数
+  #- name: apache ##函数参数，这个是省略的，也可以写上
+   - require:     ##依赖系统
+     - pkg: apache  ##表示依赖id为apache的pkg状态
+下面来解释上面示例的意思：
+
+声明一个叫apache的状态id,该id可以随意，最好能表示一定意思
+
+pkg代表的是pkg模块
+
+installed是pkg模块下的一个函数，描述的是状态，该函数表示apache是否部署，返回值为True或者False，为真时，表示状态OK，否则会去满足该状态(下载安装apache)，如果满足不了会提示error,在该模块上面省略了参数-name: apache,因为ID为apache,这些参数是模块函数需要的（可以去查看源码）
+
+service是指的service模块，这个模块下主要是描述service状态的函数，running状态函数表示apache在运行，省略-name不在表述，-require表示依赖系统，依赖系统是state system的重要组成部分，在该处描述了apache服务的运行需要依赖apache软件的部署，这里就要牵涉到sls文件的执行，sls文件在salt中执行时无序(如果没有指定顺序，后面会讲到order)，假如先执行了service这个状态，它发现依赖pkg包的安装，会去先验证pkg的状态有没有满足，如果没有依赖关系的话，我们可以想象，如果没有安装apache，apache 的service肯定运行会失败的，我们来看看怎么执行这个sls文件:
+
+salt '*' state.sls apache   
+在命令行里这样执行就ok了，.sls不要写，如果在目录下，将目录与文件用’.’隔开，如： httpd/apache.sls –> httpd.apache
+
+或者
+
+salt '*' state.highstate 
+这需要我们配置top file执定哪个minion应用哪个状态文件
+
+require与require_in, watch与watch_in
+
+require,watch是指依赖，require_in,watch_in是指被依赖
+
+a reuire b 那么就是b require_in a
+
+a watch b 那么就是b watch_in a
+
+示例: apache/init.sls文件内容
+
+/etc/httpd/httpd.conf:
+ file:
+   - managed
+- source: salt://httpd/httpd.conf
+- watch_in:
+ - service: httpd
+httpd:
+ pkg:
+   - installed
+- require_in:
+ - service: httpd
+ service:
+   - running
+
+unless做状态执行的判断

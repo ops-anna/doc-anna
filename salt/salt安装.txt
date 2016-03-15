@@ -1,0 +1,24 @@
+yum 方式安装（采用epel源）
+
+master安装：
+
+下载epel源：rpm -ivh http://mirrors.zju.edu.cn/epel/6/i386/epel-release-6-8.noarch.rpm
+使用yum安装：
+yum -y install salt-master 
+启动服务：
+service salt-master start
+查看saltmaster都安装了那些命令：
+rpm -ql salt-master
+
+minion安装：
+
+下载epel源：rpm -ivh http://mirrors.zju.edu.cn/epel/6/i386/epel-release-6-8.noar
+ch.rpm
+使用yum安装：
+yum -y install salt-minion
+修改minion配置文件16行的IP地址为Masterd服务器地址
+sed -i 's/#master: salt/master: IPADDESS/g' /etc/salt/minion
+启动服务：
+service salt-minion start
+查看saltmaster都安装了那些命令：
+rpm -ql salt-minion

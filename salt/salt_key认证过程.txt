@@ -1,0 +1,34 @@
+salt key 认证过程
+当初始化安装 minion 启动服务启动后
+
+minion端生成一个秘钥对，并产生一个ID值，minion服务会安装ID值命名的公钥发送给 master ,直到接受为止;
+master认证完毕后，会将minion 端发送来的，以ID值命名的公钥存放在 /etc/salt/pki/master/minions 目录中(无扩展名);
+master认证完毕后，会将自身的公钥发送给 minion，并存储为 /etc/salt/pki/minion/minion_master.pub.
+minion_id 值的生成过程
+minion 默认按照如下顺序，试图在找到一个不是localhost的值作为ID：
+
+Python函数socket.getfqdn() 获取的值；
+/etc/hostname 定义的值(仅限于非Windows系统)；
+/etc/hosts (%WINDIR%\system32\drivers\etc\hosts on Windows hosts) 中定义的任何映射 127.0.0.0/8 的主机名做ID值
+如果以上都能够产生一个ID， 并且不是localhost，then a sorted list of IP addresses on the minion (excluding any within 127.0.0.0/8) is inspected. The first publicly-routable IP address is used, if there is one.Otherwise, the first privately-routable IP address is used.如果一切都失败了，那么则使用localhost作为备用，最终获取的ID将记录在/etc/salt/minion_id文件中，该文件可以手动更改，重启服务后不会被重新覆盖。
+
+注意：如果minion端主配置文件 /etc/salt/minion 中启用了 id: xxxx , 那么这个ID值将覆盖 /etc/salt/minion_id 中记录的ID数值.
+
+参考
+master 秘钥对默认存储在
+
+/etc/salt/pki/master/master.pub 
+/etc/salt/pki/master/master.pem
+master 端认证的公钥存储在：
+
+/etc/salt/pki/master/minions/
+minion 秘钥对默认存储在
+
+/etc/salt/pki/minion/minion.pub 
+/etc/salt/pki/minion/minion.pem
+minion 存放的master公钥
+
+/etc/salt/pki/minion/minion_master.pub
+minion_id 默认存储在
+
+/etc/salt/minion_id

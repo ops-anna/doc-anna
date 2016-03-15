@@ -1,0 +1,149 @@
+salt命令：
+
+查看module列表： salt ‘*’ sys.list_modules
+查看module的所有function： salt ‘*’ sys.list_functions cmd 
+查看cmd module的详细用法： salt ‘*’ sys.doc cmd
+查看file.managed的详细用法： salt '*' sys.state_doc file.managed
+在master上修改Pilla文件后，需要用以下命令刷新minion上的数据:
+salt '*' saltutil.refresh_pillar
+使用-I选项表示使用Pillar来匹配minion：
+salt -I 'role:DB*' test.ping 
+nodegroup  ##作用：对minion进行分组
+编辑 /etc/salt/master 启用分组，最基本分组示例：
+
+nodegroups:
+  UBUNTU: 'ubuntu-12.04-*'
+  CENTOS: 'centos-6.4-*'
+建立分组之后,操作对象使用分组功能才生效，更多示例：
+
+nodegroups:
+  group1: 'L@foo.domain.com,bar.domain.com,baz.domain.com or bl*.domain.com'
+  group2: 'G@os:Debian and foo.domain.com'
+在state或者pillar中引用的时候,如下:
+
+base:
+  group1:
+    - match: nodegroup    
+    - webserver
+请确保这条属性存在
+
+- match: nodegroup
+-----------------------------------------------------------------------------------------------------------------------------------
+/srv/salt/top.sls 为默认入口配置文件，这个配置项可以自定义，基本配置如下：
+base:
+  '*':
+    - ubuntu.vim
+详细解释一下这个本配置文件的参数
+
+base: 默认的的起点配置项：
+'*': 这个引号内的是匹配对象，针对所有受控主机
+ubuntu.vim 就是指资源文件/srv/salt/ubuntu/vim.sls
+
+一个简单的例子：ubuntu 基本系统默是不安装 vim 我们可以利用配置管理把被托管的ubuntu主机全部安装上vim
+
+编辑 /srv/salt/ubuntu/vim.sls
+
+vim:
+  pkg:
+    - name: vim
+    - installed
+执行命令
+
+salt '*' state.highstate
+请注意观察返回结果，查看/var/log/salt/下面的日志来调试saltstack配置
+---------------------------------------------------------------------------------------------------------------------------------
+稍微复杂的例子：管理ssh服务
+
+一个更复杂的例子：管理ssh服务，并且使用salt托管配置文件
+
+/srv/salt/top.sls 内容：
+base:
+  '*':
+    - ubuntu.ssh
+/srv/salt/ubuntu/ssh.sls
+ssh:
+  pkg:
+    - name: ssh
+    - installed
+  service:
+    - name: ssh
+    - running
+    - reload: True
+    - watch:
+      - file: /etc/ssh/ssh_config
+/etc/ssh/ssh_config:
+  file.managed:
+    - source: salt://ubuntu/ssh_config
+    - user: root
+    - group: root
+    - mode: 644
+简要解释一下配置文件
+
+pkg, service , file 这些都是salt的管理模块,pkg 是包管理模块; file是文件管理模块; service 是包服务管理模块
+模块下一级是各个管理模块配置项的属性，以 service: 模块为例
+name: ssh ubuntu下的服务脚本名称是 ssh
+running 状态是持续运行，如果受控端配置了自动同步，每格一段时间就会对其状态进行检查
+reload: True 是否重载服务
+watch: 监视文件
+最后两条属性的整体含义是如果配置文件 /etc/ssh/ssh_config 发生变化，服务重启更新
+source: salt://ubuntu/ssh_config 托管的配置文件实际存储在 /srv/salt/ubuntu/ssh_config
+同样，使用如下命令来验证结果需要
+
+salt '*' state.highstate
+
+
+------------------------------------------------------------------------------------------------------------------------
+主控端命令列表
+
+/usr/bin/salt 主控命令
+/usr/bin/salt-cp 批量复制文件
+/usr/bin/salt-key 证书管理
+/usr/bin/salt-master 服务端程序
+/usr/bin/salt-run 管理虚拟机
+/usr/bin/salt-ssh 管理ssh
+/usr/bin/salt-syndic master分布式节点服务程序
+受控端命令列表
+
+/usr/bin/salt-call
+/usr/bin/salt-minion 客户端程序
+
+-----------------------------------------------------------------------------------------------------------
+创建 /srv/salt/top.sls
+
+通过正则进行匹配的示例，
+base:
+  '*':
+    - webserver
+通过分组名进行匹配的示例，必须要有 - match: nodegroup
+base:
+  group1:
+    - match: nodegroup    
+    - webserver
+通过grain模块匹配的示例，必须要有- match: grain
+base:
+  'os:Fedora':
+    - match: grain
+    - webserver
+
+
+---------------------------------------------------------------------------------------
+
+salt-run 该命令执行runner(salt带的或者自定义的，runner以后会讲)，通常在master端执行，比如经常用到的manage
+
+salt-run [options] [runner.func]
+salt-run manage.status   ##查看所有minion状态
+salt-run manage.down     ##查看所有没在线minion
+salt-run manged.up       ##查看所有在线minion
+
+
+---------------------------------------------------------------------------------------salt-master master运行命令
+
+salt-master [options]
+salt-master            ##前台运行master
+salt-master -d         ##后台运行master
+salt-master -l debug   ##前台debug输出
+
+salt-minion minion运行命令同上一样
+
+
+
